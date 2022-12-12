@@ -1,4 +1,9 @@
 # Environment variables
+cuda_version=11.1
+export CUDA_HOME=/usr/local/cuda-$(cuda_version)
+export LD_LIBRARY_PATH=$(LD_LIBRARY_PATH):$(CUDA_HOME)/lib64
+export PATH=$(PATH):/usr/local/cuda/bin
+
 C_Compiler = g++-12
 CUDA_Compiler = nvcc
 
