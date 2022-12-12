@@ -1,24 +1,40 @@
 # Environment variables
-compiler = g++-12
+C_Compiler = g++-12
+CUDA_Compiler = nvcc
 
 # Input arguments
 image_path = data/input/example.png
 kernel_choice = edge
 output_path = data/output/example.png
 
-sim: compile run clean_runtime
+# CUDA code arguments
+n_threads_per_block = 1000
+
+# Serial run recipes
+c_sim: c_compile c_run clean_runtime
 
 # Compile the following
-compile: ./conv2d.cpp
-	$(compiler) ./conv2d.cpp -o ./conv2d -O3 -ffast-math -mtune=native -lm -w
+c_compile: ./conv2d.cpp
+	$(C_Compiler) ./conv2d.cpp -o ./conv2d.out -O3 -ffast-math -mtune=native -lm -w -std=g++12
 
 # Execute the following
-run: ./conv2d
-	./conv2d $(image_path) $(kernel_choice) $(output_path)
+c_run: ./conv2d.out
+	./conv2d.out $(image_path) $(kernel_choice) $(output_path)
+
+# CUDA run recipes
+cuda_sim: cuda_compile cuda_run clean_runtime
+
+# Compile the following
+cuda_compile: ./conv2d.cu
+	$(CUDA_Compiler) ./conv2d.cu -o ./conv2d.out -O3 -use_fast_math -extra-device-vectorization -lm -std=g++12
+
+# Execute the following
+cuda_run: ./conv2d.out
+	./conv2d.out $(image_path) $(kernel_choice) $(output_path) $(n_threads_per_block)
 
 # Clean the following
 clean_runtime:
-	@rm ./conv2d
+	@rm ./conv2d.out
 
 clean_output:
 	@rm -r data/output/*
