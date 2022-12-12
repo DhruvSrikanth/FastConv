@@ -23,7 +23,7 @@ void initialize_image(Pixel **image, const int width, const int height) {
     }
 }
 
-void create_image(Pixel **image, string image_path, int *width, int *height, int *channels, const int byte_stride) {
+void create_image(Pixel **image, const string image_path, int *width, int *height, int *channels, const int byte_stride) {
     // Read image
     unsigned char *file = stbi_load(image_path.c_str(), width, height, channels, byte_stride);
 
@@ -42,7 +42,7 @@ void create_image(Pixel **image, string image_path, int *width, int *height, int
     stbi_image_free(file);
 }
 
-void write_image(Pixel **out, string output_path, const int width, const int height, const int channels, const int byte_stride) {
+void write_image(Pixel **out, const string output_path, const int width, const int height, const int channels, const int byte_stride) {
     // Allocate memory for output image
     unsigned char *file = new unsigned char[width * height * byte_stride];
 
@@ -70,7 +70,7 @@ uint16_t clamp(const double value) {
     }
 }
 
-void frobenius_norm(Pixel **out, Pixel **in, double *kernel, const int width, const int height, const int kernel_size, const int x, const int y) {
+void frobenius_norm(Pixel **out, Pixel **in, const double *kernel, const int width, const int height, const int kernel_size, const int x, const int y) {
     // Image Shift
     const int shift = kernel_size / 2;
     int y_shift = 0;
@@ -119,7 +119,7 @@ void frobenius_norm(Pixel **out, Pixel **in, double *kernel, const int width, co
 
 }
 
-void conv2D(Pixel **out, Pixel **in, double *kernel, const int width, const int height, const int kernel_size) {
+void conv2D(Pixel **out, Pixel **in, const double *kernel, const int width, const int height, const int kernel_size) {
     // Compute convolution for each pixel
     for (int y = 0; y < height; y++) {
         for (int x = 0; x < width; x++) {
@@ -128,34 +128,34 @@ void conv2D(Pixel **out, Pixel **in, double *kernel, const int width, const int 
     }
 }
 
-double* determine_kernel(string kernel_choice) {
-    double *kernel;
+const double* determine_kernel(const string kernel_choice) {
+    const double *kernel;
     if (kernel_choice == "blur") {
-        kernel = new double[9] {
+        kernel = new const double[9] {
             1/9.0, 1/9.0, 1/9.0,
             1/9.0, 1/9.0, 1/9.0,
             1/9.0, 1/9.0, 1/9.0
         };
     } else if (kernel_choice == "sharpen") {
-        kernel = new double[9] {
+        kernel = new const double[9] {
             0, -1, 0,
             -1, 5, -1,
             0, -1, 0
         };
     } else if (kernel_choice == "edge") {
-        kernel = new double[9] {
+        kernel = new const double[9] {
             -1, -1, -1,
             -1, 8, -1,
             -1, -1, -1
         };
     } else if (kernel_choice == "emboss") {
-        kernel = new double[9] {
+        kernel = new const double[9] {
             -2, -1, 0,
             -1, 1, 1,
             0, 1, 2
         };
     } else {
-        kernel = new double[9] {
+        kernel = new const double[9] {
             1.0, 1.0, 1.0,
             1.0, 1.0, 1.0,
             1.0, 1.0, 1.0
@@ -164,7 +164,7 @@ double* determine_kernel(string kernel_choice) {
     return kernel;
 }
 
-void process_image(string image_path, string kernel_choice, string output_path) {
+void process_image(const string image_path, const string kernel_choice, const string output_path) {
     // Create image
     int width, height, channels;
     const int byte_stride = 3;
@@ -173,7 +173,7 @@ void process_image(string image_path, string kernel_choice, string output_path) 
 
     // Determine kernel
     const int kernel_size = 3;
-    double *kernel = determine_kernel(kernel_choice);
+    const double *kernel = determine_kernel(kernel_choice);
 
     // Allocate memory for output image and initialize
     Pixel *out = new Pixel[width * height];
@@ -204,9 +204,9 @@ void process_image(string image_path, string kernel_choice, string output_path) 
 
 int main(int argc, char** argv) {
     // Get the image path, kernel choice and output path
-    string image_path = argv[1];
-    string kernel_choice = argv[2];
-    string output_path = argv[3];
+    const string image_path = argv[1];
+    const string kernel_choice = argv[2];
+    const string output_path = argv[3];
 
     // Process image
     process_image(image_path, kernel_choice, output_path);

@@ -10,8 +10,11 @@ using namespace std;
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 
-// Maximum number of blocks in a device grid (for dim x)
-#define MAX_BLOCKS 2147483647
+// Maximum number of blocks in a device grid (for each dim)
+#define MAX_BLOCKS 65535
+
+// Min function
+#define MIN(a,b) (((a)<(b))?(a):(b))
 
 struct Pixel {
     uint8_t r;
@@ -19,7 +22,7 @@ struct Pixel {
     uint8_t b;
 };
 
-void initialize_image(Pixel **image, const int width, const int height) {
+__host__ void initialize_image(Pixel **image, const int width, const int height) {
     // Initialize image
     for (int i = 0; i < width * height; i++) {
         (*image)[i].r = 0;
@@ -28,7 +31,7 @@ void initialize_image(Pixel **image, const int width, const int height) {
     }
 }
 
-void create_image(Pixel **image, string image_path, int *width, int *height, int *channels, const int byte_stride) {
+__host__ void create_image(Pixel **image, const string image_path, int *width, int *height, int *channels, const int byte_stride) {
     // Read image
     unsigned char *file = stbi_load(image_path.c_str(), width, height, channels, byte_stride);
 
@@ -47,7 +50,7 @@ void create_image(Pixel **image, string image_path, int *width, int *height, int
     stbi_image_free(file);
 }
 
-void write_image(Pixel **out, string output_path, const int width, const int height, const int channels, const int byte_stride) {
+__host__ void write_image(Pixel **out, const string output_path, const int width, const int height, const int channels, const int byte_stride) {
     // Allocate memory for output image
     unsigned char *file = new unsigned char[width * height * byte_stride];
 
@@ -65,7 +68,7 @@ void write_image(Pixel **out, string output_path, const int width, const int hei
     delete[] file;
 }
 
-uint16_t clamp(const double value) {
+__device__ uint16_t clamp(const double value) {
     if (value < 0) {
         return 0;
     } else if (value > 255) {
@@ -75,16 +78,16 @@ uint16_t clamp(const double value) {
     }
 }
 
-void frobenius_norm(Pixel **out, Pixel **in, double *kernel, const int width, const int height, const int kernel_size, const int x, const int y) {
+__device__ void frobenius_norm(Pixel **out, Pixel **in, const double *kernel, const int width, const int height, const int kernel_size, const int x, const int y) {
     // Image Shift
     const int shift = kernel_size / 2;
     int y_shift = 0;
     int x_shift = 0;
 
-    // Index
+    // Cuda image, out and kernel index (host and device index are the same because we spawn one thread per pixel)
     int img_index = 0;
     int kernel_index = 0;
-    const int out_index = (y * width + x);
+    const int out_index = y * width + x;
 
     // Output
     double out_r = 0.0;
@@ -97,7 +100,7 @@ void frobenius_norm(Pixel **out, Pixel **in, double *kernel, const int width, co
         y_shift = y + j - shift;
         for (int i = 0; i < kernel_size; i++) {
             // Compute shift in x direction
-            const int x_shift = x + i - shift;
+            x_shift = x + i - shift;
 
             // Check if pixel is in image (if not, skip i.e. use 0 padding)
             if (x_shift < 0 || x_shift > width - 1 || y_shift < 0 || y_shift > height - 1) {
@@ -120,47 +123,43 @@ void frobenius_norm(Pixel **out, Pixel **in, double *kernel, const int width, co
     (*out)[out_index].r = clamp(out_r);
     (*out)[out_index].g = clamp(out_g);
     (*out)[out_index].b = clamp(out_b);
-
-
 }
 
-void conv2D(Pixel **out, Pixel **in, double *kernel, const int width, const int height, const int kernel_size) {
+__global__ void conv2D(Pixel **out, Pixel **in, const double *kernel, const int width, const int height, const int kernel_size) {
     // Compute convolution for each pixel
-    for (int y = 0; y < height; y++) {
-        for (int x = 0; x < width; x++) {
-            frobenius_norm(out, in, kernel, width, height, kernel_size, x, y);
-        }
-    }
+    const int x = blockIdx.x * blockDim.x + threadIdx.x;
+    const int y = blockIdx.y * blockDim.y + threadIdx.y;
+    frobenius_norm(out, in, kernel, width, height, kernel_size, x, y);
 }
 
-double* determine_kernel(string kernel_choice) {
-    double *kernel;
+__host__ const double* determine_kernel(const string kernel_choice) {
+    const double *kernel;
     if (kernel_choice == "blur") {
-        kernel = new double[9] {
+        kernel = new const double[9] {
             1/9.0, 1/9.0, 1/9.0,
             1/9.0, 1/9.0, 1/9.0,
             1/9.0, 1/9.0, 1/9.0
         };
     } else if (kernel_choice == "sharpen") {
-        kernel = new double[9] {
+        kernel = new const double[9] {
             0, -1, 0,
             -1, 5, -1,
             0, -1, 0
         };
     } else if (kernel_choice == "edge") {
-        kernel = new double[9] {
+        kernel = new const double[9] {
             -1, -1, -1,
             -1, 8, -1,
             -1, -1, -1
         };
     } else if (kernel_choice == "emboss") {
-        kernel = new double[9] {
+        kernel = new const double[9] {
             -2, -1, 0,
             -1, 1, 1,
             0, 1, 2
         };
     } else {
-        kernel = new double[9] {
+        kernel = new const double[9] {
             1.0, 1.0, 1.0,
             1.0, 1.0, 1.0,
             1.0, 1.0, 1.0
@@ -169,52 +168,114 @@ double* determine_kernel(string kernel_choice) {
     return kernel;
 }
 
-void process_image(string image_path, string kernel_choice, string output_path) {
-    // Create image
+__host __ void process_image(const string image_path, const string kernel_choice, const string output_path, const int nthreads_per_block) {
+    // Create image on host
     int width, height, channels;
     const int byte_stride = 3;
     Pixel *image;
     create_image(&image, image_path, &width, &height, &channels, byte_stride);
 
-    // Determine kernel
-    const int kernel_size = 3;
-    double *kernel = determine_kernel(kernel_choice);
+    // Create image on device
+    int width_d, height_d, channels_d;
+    const int byte_stride_d;
+    Pixel *image_d;
+    cudaMalloc(&width_d, sizeof(int));
+    cudaMalloc(&height_d, sizeof(int));
+    cudaMalloc(&channels_d, sizeof(int));
+    cudaMalloc(&byte_stride_d, sizeof(int));
+    cudaMalloc(&image_d, width * height * byte_stride * sizeof(Pixel));
 
-    // Allocate memory for output image and initialize
+    // Copy image to device
+    cudaMemcpy(width_d, &width, sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(height_d, &height, sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(channels_d, &channels, sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(byte_stride_d, &byte_stride, sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(image_d, image, width * height * byte_stride * sizeof(Pixel), cudaMemcpyHostToDevice);
+
+    // Determine kernel on host
+    const int kernel_size = 3;
+    const double *kernel = determine_kernel(kernel_choice);
+
+    // Create kernel on device
+    const int kernel_size_d;
+    const double *kernel_d;
+    cudaMalloc(&kernel_size_d, sizeof(int));
+    cudaMalloc(&kernel_d, kernel_size * kernel_size * sizeof(double));
+
+    // Copy kernel to device
+    cudaMemcpy(kernel_size_d, &kernel_size, sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(kernel_d, kernel, kernel_size * kernel_size * sizeof(double), cudaMemcpyHostToDevice);
+
+    // Allocate memory for output image on host and initialize
     Pixel *out = new Pixel[width * height];
     initialize_image(&out, width, height);
 
+    // Allocate memory for output image on device
+    Pixel *out_d;
+    cudaMalloc(&out_d, width * height * sizeof(Pixel));
+    cudaMemcpy(out_d, out, width * height * sizeof(Pixel), cudaMemcpyHostToDevice);
+
+    // Compute the number of blocks
+    const int x_blocks = MIN((width/n_threads_per_block) + 1, MAX_BLOCKS);
+    const int y_blocks = MIN((height/n_threads_per_block) + 1, MAX_BLOCKS);
+    const dim3 block_size(n_threads_per_block, n_threads_per_block);
+    const dim3 grid_size(x_blocks, y_blocks);
+
+    // CUDA timer
+    cudaEvent_t start_device, stop_device;  
+    float time_device;
+
+    // Create timers
+    cudaEventCreate(&start_device);
+    cudaEventCreate(&stop_device);
+
     // Start timer
-    auto start = chrono::high_resolution_clock::now();
+    cudaEventRecord(start_device, 0);  
 
     // Compute convolution
-    conv2D(&out, &image, kernel, width, height, kernel_size);
+    conv2D<<<grid_size, block_size>>>(out_d, image_d, kernel_d, width_d, height_d, kernel_size_d);
 
     // Stop timer
-    auto stop = chrono::high_resolution_clock::now();
+    cudaEventRecord(stop_device, 0);
+    cudaEventSynchronize(stop_device);
+    cudaEventElapsedTime(&time_device, start_device, stop_device);
 
     // Compute time
-    auto duration = chrono::duration_cast<chrono::microseconds>(stop - start);
-    cout << "Time taken: " << duration.count() * 1e-3 << " milliseconds" << endl;
+    cout << "Time: " << time_device << " ms" << endl;
+
+    // Copy output image from device to host
+    cudaMemcpy(out, out_d, width * height * sizeof(Pixel), cudaMemcpyDeviceToHost);
 
     // Write output image
     write_image(&out, output_path, width, height, channels, byte_stride);
     
 
-    // Free memory
+    // Free memory on host
     delete[] image;
     delete[] out;
     delete[] kernel;
+
+    // Free memory on device
+    cudaFree(width_d);
+    cudaFree(height_d);
+    cudaFree(channels_d);
+    cudaFree(byte_stride_d);
+    cudaFree(kernel_size_d);
+    cudaFree(image_d);
+    cudaFree(out_d);
+    cudaFree(kernel_d);
+
 }
 
-int main(int argc, char** argv) {
-    // Get the image path, kernel choice and output path
-    string image_path = argv[1];
-    string kernel_choice = argv[2];
-    string output_path = argv[3];
+__host__ int main(int argc, char** argv) {
+    // Get the input args
+    const string image_path = argv[1];
+    const string kernel_choice = argv[2];
+    const string output_path = argv[3];
+    const int nthreads_per_block = atoi(argv[4]);
 
     // Process image
-    process_image(image_path, kernel_choice, output_path);
+    process_image(image_path, kernel_choice, output_path, nthreads_per_block);
 
     return 0;
 }
