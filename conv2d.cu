@@ -183,13 +183,13 @@ __host __ void process_image(const string image_path, const string kernel_choice
     cudaMalloc(&height_d, sizeof(int));
     cudaMalloc(&channels_d, sizeof(int));
     cudaMalloc(&byte_stride_d, sizeof(int));
-    cudaMalloc(&image_d, width * height * byte_stride * sizeof(Pixel));
+    cudaMalloc(image_d, width * height * byte_stride * sizeof(Pixel));
 
     // Copy image to device
-    cudaMemcpy(width_d, &width, sizeof(int), cudaMemcpyHostToDevice);
-    cudaMemcpy(height_d, &height, sizeof(int), cudaMemcpyHostToDevice);
-    cudaMemcpy(channels_d, &channels, sizeof(int), cudaMemcpyHostToDevice);
-    cudaMemcpy(byte_stride_d, &byte_stride, sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(&width_d, &width, sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(&height_d, &height, sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(&channels_d, &channels, sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(&byte_stride_d, &byte_stride, sizeof(int), cudaMemcpyHostToDevice);
     cudaMemcpy(image_d, image, width * height * byte_stride * sizeof(Pixel), cudaMemcpyHostToDevice);
 
     // Determine kernel on host
@@ -200,10 +200,10 @@ __host __ void process_image(const string image_path, const string kernel_choice
     const int kernel_size_d;
     const double *kernel_d;
     cudaMalloc(&kernel_size_d, sizeof(int));
-    cudaMalloc(&kernel_d, kernel_size * kernel_size * sizeof(double));
+    cudaMalloc(kernel_d, kernel_size * kernel_size * sizeof(double));
 
     // Copy kernel to device
-    cudaMemcpy(kernel_size_d, &kernel_size, sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(&kernel_size_d, &kernel_size, sizeof(int), cudaMemcpyHostToDevice);
     cudaMemcpy(kernel_d, kernel, kernel_size * kernel_size * sizeof(double), cudaMemcpyHostToDevice);
 
     // Allocate memory for output image on host and initialize
@@ -212,7 +212,7 @@ __host __ void process_image(const string image_path, const string kernel_choice
 
     // Allocate memory for output image on device
     Pixel *out_d;
-    cudaMalloc(&out_d, width * height * sizeof(Pixel));
+    cudaMalloc(out_d, width * height * sizeof(Pixel));
     cudaMemcpy(out_d, out, width * height * sizeof(Pixel), cudaMemcpyHostToDevice);
 
     // Compute the number of blocks
@@ -256,11 +256,11 @@ __host __ void process_image(const string image_path, const string kernel_choice
     delete[] kernel;
 
     // Free memory on device
-    cudaFree(width_d);
-    cudaFree(height_d);
-    cudaFree(channels_d);
-    cudaFree(byte_stride_d);
-    cudaFree(kernel_size_d);
+    cudaFree(&width_d);
+    cudaFree(&height_d);
+    cudaFree(&channels_d);
+    cudaFree(&byte_stride_d);
+    cudaFree(&kernel_size_d);
     cudaFree(image_d);
     cudaFree(out_d);
     cudaFree(kernel_d);
