@@ -1,2 +1,5 @@
-# FastCNN-Layer
-A distributed implementation of a CNN layer in CUDA
+# FastConv
+
+A distributed implementation of the 2D Convolution operation in CUDA
+
+
