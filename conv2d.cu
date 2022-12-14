@@ -168,7 +168,7 @@ __host__ const double* determine_kernel(const string kernel_choice) {
     return kernel;
 }
 
-__host __ void process_image(const string image_path, const string kernel_choice, const string output_path, const int nthreads_per_block) {
+__host__ void process_image(const string image_path, const string kernel_choice, const string output_path, const int nthreads_per_block) {
     // Create image on host
     int width, height, channels;
     const int byte_stride = 3;
